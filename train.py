@@ -1,20 +1,22 @@
 import math
 
-import Models
+import Models, ModelsV2
 import random
 import numpy as np
 import torch
 from torch import nn, optim
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
+from dataset import DehazeDataset, DehazeDatasetVal
+import copy
 
 # Setup global parameters to adjust for training our model
-iterations = 2
-batch_size = 2
+epochs = 10
+batch_size = 32
 learning_rate = 0.0006
 exponent = 5  # channel exponent to control network size
 save_loss = False  # boolean indicating whether we save losses per epoch
 model_path = ''  # file path to a pre-trained model (if it exists)
-is_gpu = False
+is_gpu = True
 
 
 def setup_random_seed(seed):
@@ -34,23 +36,19 @@ def print_model(model):
 
 
 def setup_datasets():
-    # TODO: Currently using a dummy dataset, need to modify to use our dataset
-    first_rand = torch.randn(5, 3, 572, 572)
-    second_rand = torch.randn(5, 3, 572, 572)
-    training_data = TensorDataset(first_rand, second_rand)
+    training_data = DehazeDataset("./ResideITS/hazy", "./ResideITS/clear", 5, 0.2)
     t_loader = DataLoader(training_data, batch_size, True, drop_last=True)
 
-    validation_data = TensorDataset(first_rand, second_rand)
+    validation_data = DehazeDatasetVal(training_data)
     v_loader = DataLoader(validation_data, batch_size, False, drop_last=True)
     return t_loader, v_loader
 
 
 # Setup our model and then print out associated relevant information
-unet = Models.UNet(enc_chs=(3, 64, 128, 256), dec_chs=(256, 128, 64), retain_dim=True)
-unet.apply(Models.weights_init)
-# TODO: Update the loss function to be good for our problem (L1 Loss maybe)
+unet = ModelsV2.UNet()
+unet.apply(ModelsV2.weights_init)
 loss_function = nn.MSELoss()
-print_model(unet)
+#print_model(unet)
 if is_gpu:
     unet.cuda()
     loss_function.cuda()
@@ -62,28 +60,28 @@ train_loader, validation_loader = setup_datasets()
 print("Using " + str(len(train_loader)) + " Training Batches")
 print("Using " + str(len(validation_loader)) + " Validation Batches")
 
-epochs = math.ceil(iterations/len(train_loader))
-
 if len(model_path) > 0:
     unet.load_state_dict(torch.load(model_path))
     print("Loaded the model stored in " + model_path)
 
-# TODO: Need to update this to work with the dimensions of our problem
 if is_gpu:
-    inputs = torch.autograd.Variable(torch.FloatTensor(batch_size, 1, 28, 28))
-    targets = torch.autograd.Variable(torch.FloatTensor(batch_size, 10))
+    inputs = torch.autograd.Variable(torch.FloatTensor(batch_size, 3, 512, 512))
+    targets = torch.autograd.Variable(torch.FloatTensor(batch_size, 3, 512, 512))
 else:
     inputs, targets = None, None
 
-# TODO: Update these to display loss however we want to display it :)
+train_losses = []
+val_losses = []
+
 for epoch in range(epochs):
+    train_loss_accum = 0.0
     for i, train_data in enumerate(train_loader, 0):
         inputs_cpu, targets_cpu = train_data
         if is_gpu:
             inputs_cpu = inputs_cpu.float().cuda()
             targets_cpu = targets_cpu.float().cuda()
-            inputs.data.resize_as(inputs_cpu).copy(inputs_cpu)
-            targets.data.resize_as(targets_cpu).copy(targets_cpu)
+            inputs.data = torch.clone(inputs_cpu)
+            targets.data = torch.clone(targets_cpu)
         else:
             inputs = inputs_cpu
             targets = targets_cpu
@@ -92,22 +90,35 @@ for epoch in range(epochs):
         outputs = unet(inputs)
         loss = loss_function(outputs, targets)
         loss.backward()
-        loss_val = 0
         optimizer.step()
+        train_loss_accum+=loss.item()
         print(f'Epoch: {epoch}, Batch: {i}, Loss: {loss.item()}')
+    torch.save(copy.deepcopy(unet.state_dict()),"Models/UNet_32_6e-4_256_ep"+str(epoch)+".pt")
+    print ("Train loss at epoch "+str(epoch)+" : "+str(train_loss_accum/float(len(train_loader))))
+    train_losses.append(train_loss_accum/float(len(train_loader)))
 
+    val_loss_accum = 0.0
     unet.eval()
     for i, valid_data in enumerate(validation_loader, 0):
         inputs_cpu, targets_cpu = valid_data
         if is_gpu:
             inputs_cpu = inputs_cpu.float().cuda()
             targets_cpu = targets_cpu.float().cuda()
-            inputs.data.resize_as(inputs_cpu).copy(inputs_cpu)
-            targets.data.resize_as(targets_cpu).copy(targets_cpu)
+            inputs.data = torch.clone(inputs_cpu)
+            targets.data = torch.clone(targets_cpu)
         else:
             inputs = inputs_cpu
             targets = targets_cpu
 
         outputs = unet(inputs)
         loss = loss_function(outputs, targets)
+        val_loss_accum+=loss.item()
         print(f'Batch: {i}, Loss: {loss.item()}')
+    
+    print ("Validation loss at epoch "+str(epoch)+" : "+str(val_loss_accum/float(len(validation_loader))))
+    val_losses.append(val_loss_accum/float(len(validation_loader)))
+
+print ("Training losses:")
+print (train_losses)
+print ("Validation losses:")
+print (val_losses)

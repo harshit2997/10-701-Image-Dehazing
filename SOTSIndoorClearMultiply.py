@@ -1,8 +1,8 @@
 import os
 import shutil
 
-hazyNames = os.listdir(".\\ResideSOTS\\indoor\\hazy")
-clearNames = os.listdir(".\\ResideSOTS\\indoor\\gt")
+hazyNames = os.listdir("./ResideSOTS/indoor/hazy")
+clearNames = os.listdir("./ResideSOTS/indoor/gt")
 
 hazyNames = sorted(hazyNames, key = lambda s: int(s.split('_')[0]))
 clearNames = sorted(clearNames, key = lambda s: int(s.split('.')[0]))
@@ -17,11 +17,11 @@ while(i<len(clearNames) and j<len(hazyNames)):
     rootHazyName = hazyName.split('_')[0]
 
     if not (rootClearName == rootHazyName):
-        os.remove(".\\ResideSOTS\\indoor\\gt\\"+clearName)
+        os.remove("./ResideSOTS/indoor/gt/"+clearName)
         i+=1
         continue
     else:
-        shutil.copy(".\\ResideSOTS\\indoor\\gt\\"+clearName, ".\\ResideSOTS\\indoor\\gt\\"+hazyName)
+        shutil.copy("./ResideSOTS/indoor/gt/"+clearName, "./ResideSOTS/indoor/gt/"+hazyName)
         j+=1
 
-os.remove(".\\ResideSOTS\\indoor\\gt\\"+clearNames[i])
+os.remove("./ResideSOTS/indoor/gt/"+clearNames[i])

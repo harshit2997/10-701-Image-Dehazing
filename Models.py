@@ -55,7 +55,7 @@ class Block(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, chs=(3, 64, 128, 256, 512, 1024), activation='ReLU', kernel_size=(3, 3), bn=False, dropout=0):
+    def __init__(self, chs=(3, 32, 64, 128, 256, 512, 1024), activation='ReLU', kernel_size=(3, 3), bn=False, dropout=0):
         super().__init__()
         enc_list = []
         self.pool = nn.MaxPool2d(2)
@@ -76,7 +76,7 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, chs=(1024, 512, 256, 128, 64), activation='ReLU', kernel_size=(3, 3), bn=False, dropout=0):
+    def __init__(self, chs=(1024, 512, 256, 128, 64, 32), activation='ReLU', kernel_size=(3, 3), bn=False, dropout=0):
         super().__init__()
         conv_list = []
         dec_list = []
@@ -127,6 +127,15 @@ class UNet(nn.Module):
             return nn.functional.interpolate(output, self.output_size)
         else:
             return output
+
+def weights_init(module):
+    if isinstance(module, nn.Conv2d):
+        module.weight.data.normal_(0.0, 0.02)
+    if isinstance(module, nn.ConvTranspose2d):
+        module.weight.data.normal_(0.0,0.02)
+    elif isinstance(module, nn.BatchNorm2d):
+        module.weight.data.normal_(1.0, 0.02)
+        module.bias.fill_(0.0)
 
 
 # unet = UNet(retain_dim=True)

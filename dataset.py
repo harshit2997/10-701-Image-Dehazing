@@ -1,10 +1,15 @@
+from typing_extensions import Self
 from torch.utils.data import Dataset
 import numpy as np
 import os
 import random
 from PIL import Image
+import torchvision.transforms as T
 
-def processIfRequired(im, H, W):
+W = 512
+H = 512
+
+def processIfRequired(im):
     curW = im.size[0]
     curH = im.size[1]
 
@@ -17,71 +22,68 @@ def processIfRequired(im, H, W):
         curW = im.size[0]
         curH = im.size[1]
 
-    #no resizing for now. just rotation
-    return im
-
-def LoaderNormalizer(data):
-    W = 620
-    H = 460
-
-    fileNames = os.listdir(data.inputDir)
-
-    data.totalLength = len(fileNames)
-    data.inputs  = np.empty((len(fileNames), 3, H, W))
-    data.targets = np.empty((len(fileNames), 3, H, W))
-
-    for i, fileName in enumerate(fileNames):
-        inputIm = Image.open(data.inputDir+fileName)
-        targetIm = Image.open(data.targetDir+fileName)
-
-        inputIm = processIfRequired(inputIm, H, W)
-        targetIm = processIfRequired(targetIm, H, W)     
-        
-        inputAr = (np.asarray(inputIm).transpose([2,0,1]))/255.0
-        targetAr = (np.asarray(targetIm).transpose([2,0,1]))/255.0
-
-        data.inputs[i] = inputAr
-        data.targets[i] = targetAr
-
-    return data
+    return T.Resize((H,W))(im)
 
 class DehazeDataset(Dataset):
     def __init__(self, inputDir, targetDir, shuffle=0, valProp = 0.0):
         self.inputDir = inputDir
         self.targetDir = targetDir
 
-        if not (self.inputDir[-1:]=='\\'):
-            self.inputDir = self.inputDir + '\\'
+        if not (self.inputDir[-1:]=='/'):
+            self.inputDir = self.inputDir + '/'
 
-        if not (self.targetDir[-1:]=='\\'):
-            self.targetDir = self.targetDir + '\\'            
+        if not (self.targetDir[-1:]=='/'):
+            self.targetDir = self.targetDir + '/'            
         
-        self = LoaderNormalizer(self, shuffle=shuffle)
+        self.fileNames = os.listdir(self.inputDir)
 
+        for i in range(shuffle):
+            random.shuffle(self.fileNames)
+        
+        self.totalLength = len(self.fileNames)
         valLength = int(self.totalLength*valProp)
 
-        self.valInputs = self.inputs[(self.totalLength-valLength):]
-        self.valTargets = self.targets[(self.totalLength-valLength):]
+        self.valFileNames = self.fileNames[(self.totalLength-valLength):]
         self.valLength = valLength
 
-        self.inputs = self.inputs[:(self.totalLength-valLength)]
-        self.targets = self.targets[:(self.totalLength-valLength)]
-        self.totalLength = self.inputs.shape[0]
+        self.totalLength = self.totalLength-valLength
 
     def __len__(self):
         return self.totalLength
 
     def __getitem__(self, idx):
-        return self.inputs[idx], self.targets[idx]
+        fileName = self.fileNames[idx]
 
-class DehazeDatasetVal(DehazeDataset):
-    def __init__(self, dataset): 
-        self.inputs = dataset.valInputs
-        self.targets = dataset.valTargets
+        inputIm = Image.open(self.inputDir+fileName)
+        targetIm = Image.open(self.targetDir+fileName)
+
+        inputIm = processIfRequired(inputIm)
+        targetIm = processIfRequired(targetIm)     
+        
+        inputAr = ((np.asarray(inputIm).transpose([2,0,1]))/255.0).astype(np.float32)
+        targetAr = ((np.asarray(targetIm).transpose([2,0,1]))/255.0).astype(np.float32)
+
+        return inputAr, targetAr
+
+class DehazeDatasetVal(Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+        self.fileNames = dataset.valFileNames
         self.totalLength = dataset.valLength
 
     def __len__(self):
         return self.totalLength
 
     def __getitem__(self, idx):
-        return self.inputs[idx], self.targets[idx]
+        fileName = self.fileNames[idx]
+
+        inputIm = Image.open(self.dataset.inputDir+fileName)
+        targetIm = Image.open(self.dataset.targetDir+fileName)
+
+        inputIm = processIfRequired(inputIm)
+        targetIm = processIfRequired(targetIm)     
+        
+        inputAr = ((np.asarray(inputIm).transpose([2,0,1]))/255.0).astype(np.float32)
+        targetAr = ((np.asarray(targetIm).transpose([2,0,1]))/255.0).astype(np.float32)
+
+        return inputAr, targetAr
