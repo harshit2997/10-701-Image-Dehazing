@@ -10,12 +10,12 @@ from dataset import DehazeDataset, DehazeDatasetVal
 import copy
 
 # Setup global parameters to adjust for training our model
-epochs = 10
-batch_size = 32
-learning_rate = 0.0006
-exponent = 5  # channel exponent to control network size
+epochs = 100
+batch_size = 64
+learning_rate = 0.00006
+exponent = 3  # channel exponent to control network size
 save_loss = False  # boolean indicating whether we save losses per epoch
-model_path = ''  # file path to a pre-trained model (if it exists)
+model_path = ''
 is_gpu = True
 
 
@@ -65,8 +65,8 @@ if len(model_path) > 0:
     print("Loaded the model stored in " + model_path)
 
 if is_gpu:
-    inputs = torch.autograd.Variable(torch.FloatTensor(batch_size, 3, 512, 512))
-    targets = torch.autograd.Variable(torch.FloatTensor(batch_size, 3, 512, 512))
+    inputs = torch.autograd.Variable(torch.FloatTensor(batch_size, 3, 256, 256))
+    targets = torch.autograd.Variable(torch.FloatTensor(batch_size, 3, 256, 256))
 else:
     inputs, targets = None, None
 
@@ -92,8 +92,9 @@ for epoch in range(epochs):
         loss.backward()
         optimizer.step()
         train_loss_accum+=loss.item()
-        print(f'Epoch: {epoch}, Batch: {i}, Loss: {loss.item()}')
-    torch.save(copy.deepcopy(unet.state_dict()),"Models/UNet_32_6e-4_256_ep"+str(epoch)+".pt")
+        #print(f'Epoch: {epoch}, Batch: {i}, Loss: {loss.item()}')
+
+    torch.save(copy.deepcopy(unet.state_dict()),"Models/UNet_256sq_64_6e-5_64_ep"+str(epoch)+".pt")
     print ("Train loss at epoch "+str(epoch)+" : "+str(train_loss_accum/float(len(train_loader))))
     train_losses.append(train_loss_accum/float(len(train_loader)))
 
@@ -113,7 +114,7 @@ for epoch in range(epochs):
         outputs = unet(inputs)
         loss = loss_function(outputs, targets)
         val_loss_accum+=loss.item()
-        print(f'Batch: {i}, Loss: {loss.item()}')
+        #print(f'Batch: {i}, Loss: {loss.item()}')
     
     print ("Validation loss at epoch "+str(epoch)+" : "+str(val_loss_accum/float(len(validation_loader))))
     val_losses.append(val_loss_accum/float(len(validation_loader)))
