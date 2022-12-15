@@ -1,3 +1,6 @@
+# The code has been taken from an efficient U-Net design that Harshit had worked on few years back. It can be found here:
+# https://github.com/thunil/Deep-Flow-Prediction/blob/master/train/DfpNet.py
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
