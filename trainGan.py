@@ -10,13 +10,17 @@ import copy
 # Setup global parameters to adjust for training our model
 epochs = 100
 batch_size = 64
-learning_rate = 0.00006
-exponent = 5  # channel exponent to control network size
+learning_rateG = 0.0006
+learning_rateD = 0.000006
+exponent = 5  # channel exponent to control network size of generator
+starting_channels = 32 # first layer channels of discriminator
 save_loss = False  # boolean indicating whether we save losses per epoch
-model_path = '' # path to a pre-trained model (if it exists)
+model_pathG = '' # path to a pre-trained generator model (if it exists)
+model_pathD = '' # path to a pre-trained discriminator model (if it exists)
 is_gpu = True
 log_every_batch = False
-model_name_base_to_save = 'UNetL1_256sq_64_6e-5_128_ep'
+gen_model_name_base_to_save = 'P2P_gen_256sq_64_6e-4_256_ep'
+discr_model_name_base_to_save = 'P2P_discr_256sq_64_6e-5_32_ep'
 
 def setup_random_seed(seed):
     random.seed(seed)
@@ -33,7 +37,6 @@ def print_model(model):
     print("Initialized Model with " + str(params) + " trainable params")
     print("The model architecture looks like this:")
     print(model)
-
 
 def setup_datasets():
     training_data = DehazeDataset("./ResideITS/hazy", "./ResideITS/clear", 5, 0.2)
@@ -54,22 +57,33 @@ def weights_init(m):
 # Setup our model and then print out associated relevant information
 unet = ModelsV2.UNet(channelExponent=exponent)
 unet.apply(weights_init)
-loss_function = nn.L1Loss()
+netD = ModelsV2.NetD(3,3,ch=starting_channels)
+netD.apply(weights_init)
+l1_loss_function = nn.L1Loss()
+bce_loss_function = nn.BCELoss()
+
 print_model(unet)
+print_model(netD)
+
 if is_gpu:
     unet.cuda()
-    loss_function.cuda()
+    netD.cuda()
+    l1_loss_function.cuda()
+    bce_loss_function.cuda()
 
-optimizer = optim.Adam(unet.parameters(), lr=learning_rate)
+optimizerG = optim.Adam(unet.parameters(), lr=learning_rateG)
+optimizerD = optim.Adam(netD.parameters(), lr=learning_rateD)
 
 # Setup the datasets to use for testing + validation
 train_loader, validation_loader = setup_datasets()
 print("Using " + str(len(train_loader)) + " Training Batches")
 print("Using " + str(len(validation_loader)) + " Validation Batches")
 
-if len(model_path) > 0:
-    unet.load_state_dict(torch.load(model_path))
-    print("Loaded the model stored in " + model_path)
+if len(model_pathG) > 0 and len(model_pathD) > 0:
+    unet.load_state_dict(torch.load(model_pathG))
+    print("Loaded the UNet model stored in " + model_pathG)
+    netD.load_state_dict(torch.load(model_pathD))
+    print("Loaded the discriminator model stored in " + model_pathD)    
 
 if is_gpu:
     inputs = torch.autograd.Variable(torch.FloatTensor(batch_size, 3, 256, 256))
@@ -77,11 +91,13 @@ if is_gpu:
 else:
     inputs, targets = None, None
 
-train_losses = []
+train_lossesG = []
+train_lossesD = []
 val_losses = []
 
 for epoch in range(epochs):
-    train_loss_accum = 0.0
+    loss_accumG = 0.0
+    loss_accumD = 0.0
     for i, train_data in enumerate(train_loader, 0):
         inputs_cpu, targets_cpu = train_data
         if is_gpu:
@@ -93,18 +109,40 @@ for epoch in range(epochs):
             inputs = inputs_cpu
             targets = targets_cpu
 
-        unet.zero_grad()
-        outputs = unet(inputs)
-        loss = loss_function(outputs, targets)
-        loss.backward()
-        optimizer.step()
-        train_loss_accum+=loss.item()
-        if log_every_batch:
-            print(f'Epoch: {epoch}, Batch: {i}, Loss: {loss.item()}')
+        netD.zero_grad()
+        outputs_realD = netD(inputs, targets).squeeze()
+        real_lossD = bce_loss_function(outputs_realD, torch.autograd.Variable(torch.ones(outputs_realD.size()).cuda()))
+        outputsG = unet(inputs)
+        outputs_fakeD = netD(inputs, outputsG).squeeze()
+        fake_lossD = bce_loss_function(outputs_fakeD, torch.autograd.Variable(torch.zeros(outputs_fakeD.size()).cuda()))
 
-    torch.save(copy.deepcopy(unet.state_dict()), "Models/" + model_name_base_to_save + str(epoch) + ".pt")
-    print ("Train loss at epoch "+str(epoch)+" : "+str(train_loss_accum/float(len(train_loader))))
-    train_losses.append(train_loss_accum/float(len(train_loader)))
+        lossD = (real_lossD + fake_lossD) * 0.5
+        lossD.backward()
+        optimizerD.step()
+        loss_accumD+=lossD.item()
+
+        unet.zero_grad()
+        outputsG = unet(inputs)
+        outputs_fakeD = netD(inputs, outputsG).squeeze()
+        l1lossG = l1_loss_function(outputsG, targets)
+        lossG = l1lossG + bce_loss_function(outputs_fakeD, torch.autograd.Variable(torch.ones(outputs_fakeD.size()).cuda()))
+        lossG.backward()
+        optimizerG.step()
+
+        loss_accumG+=lossG.item()
+
+        if log_every_batch:
+          print(f'Epoch: {epoch}, Batch: {i}, discriminator loss: {lossD.item()}')
+          print(f'Epoch: {epoch}, Batch: {i}, L1 generator loss: {l1lossG.item()}')
+          print(f'Epoch: {epoch}, Batch: {i}, total generator loss: {lossG.item()}')
+
+    torch.save(copy.deepcopy(unet.state_dict()), "Models/" + gen_model_name_base_to_save + str(epoch) + ".pt")
+    torch.save(copy.deepcopy(netD.state_dict()),"Models/" + discr_model_name_base_to_save + str(epoch) + ".pt")
+    
+    print ("Train generator loss at epoch "+str(epoch)+" : "+str(loss_accumG/float(len(train_loader))))
+    train_lossesG.append(loss_accumG/float(len(train_loader)))
+    print ("Train discriminator loss at epoch "+str(epoch)+" : "+str(loss_accumD/float(len(train_loader))))
+    train_lossesD.append(loss_accumD/float(len(train_loader)))
 
     val_loss_accum = 0.0
     unet.eval()
@@ -120,7 +158,7 @@ for epoch in range(epochs):
             targets = targets_cpu
 
         outputs = unet(inputs)
-        loss = loss_function(outputs, targets)
+        loss = l1_loss_function(outputs, targets)
         val_loss_accum+=loss.item()
         if log_every_batch:
             print(f'Batch: {i}, Loss: {loss.item()}')
@@ -128,7 +166,9 @@ for epoch in range(epochs):
     print ("Validation loss at epoch "+str(epoch)+" : "+str(val_loss_accum/float(len(validation_loader))))
     val_losses.append(val_loss_accum/float(len(validation_loader)))
 
-print ("Training losses:")
-print (train_losses)
+print ("Training losses generator:")
+print (train_lossesG)
+print ("Training losses discriminator:")
+print (train_lossesD)
 print ("Validation losses:")
 print (val_losses)

@@ -82,9 +82,9 @@ class UNet(nn.Module):
         return dout1
 
 # discriminator (only for adversarial training, currently unused)
-class TurbNetD(nn.Module):
+class NetD(nn.Module):
     def __init__(self, in_channels1, in_channels2,ch=64):
-        super(TurbNetD, self).__init__()
+        super(NetD, self).__init__()
 
         self.c0 = nn.Conv2d(in_channels1 + in_channels2, ch, 4, stride=2, padding=2)
         self.c1 = nn.Conv2d(ch  , ch*2, 4, stride=2, padding=2)
