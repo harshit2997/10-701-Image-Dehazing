@@ -28,7 +28,7 @@ def blockUNet(in_c, out_c, name, transposed=False, bn=True, relu=True, size=4, p
         block.add_module('%s_dropout' % name, nn.Dropout2d( dropout, inplace=True))
     return block
     
-# generator model
+# U-Net generator model
 class UNet(nn.Module):
     def __init__(self, channelExponent=5, dropout=0.):
         super(UNet, self).__init__()
@@ -81,7 +81,7 @@ class UNet(nn.Module):
         dout1 = self.dlayer1(dout2_out1)
         return dout1
 
-# discriminator (only for adversarial training, currently unused)
+# PatchGAN discriminator model
 class NetD(nn.Module):
     def __init__(self, in_channels1, in_channels2,ch=64):
         super(NetD, self).__init__()
