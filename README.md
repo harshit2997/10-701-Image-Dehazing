@@ -15,7 +15,7 @@ bash
 ```
 A trained model is saved after each epoch and you can modify where it is saved by modifying the file paths in train.py and trainGAN.py.
 
-##Hyperparameters
+## Hyperparameters
 For the best U-Net, set exponent=5 (256-dim bottleneck) and learnig rate = 6e-5.
 For the GAN, set exponent=5 (256-dim bottleneck), starting_channels=32 (first layer channels of discriminator), learning rate of generator = 6e-4, learning rate of discriminator = 6e-6.
 
