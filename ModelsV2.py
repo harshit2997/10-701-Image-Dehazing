@@ -1,3 +1,6 @@
+# The code has been taken from an efficient U-Net design that Harshit had worked on few years back. It can be found here:
+# https://github.com/thunil/Deep-Flow-Prediction/blob/master/train/DfpNet.py
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -28,7 +31,7 @@ def blockUNet(in_c, out_c, name, transposed=False, bn=True, relu=True, size=4, p
         block.add_module('%s_dropout' % name, nn.Dropout2d( dropout, inplace=True))
     return block
     
-# generator model
+# U-Net generator model
 class UNet(nn.Module):
     def __init__(self, channelExponent=5, dropout=0.):
         super(UNet, self).__init__()
@@ -81,10 +84,10 @@ class UNet(nn.Module):
         dout1 = self.dlayer1(dout2_out1)
         return dout1
 
-# discriminator (only for adversarial training, currently unused)
-class TurbNetD(nn.Module):
+# PatchGAN discriminator model
+class NetD(nn.Module):
     def __init__(self, in_channels1, in_channels2,ch=64):
-        super(TurbNetD, self).__init__()
+        super(NetD, self).__init__()
 
         self.c0 = nn.Conv2d(in_channels1 + in_channels2, ch, 4, stride=2, padding=2)
         self.c1 = nn.Conv2d(ch  , ch*2, 4, stride=2, padding=2)
